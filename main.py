@@ -2,59 +2,57 @@ import os
 import glob
 import pandas as pd
 
-if __name__ == "__main__":
-    
-    # Get the current directory and append the "PulseTrainData" subdirectory
-    current_directory = os.path.join(os.getcwd(), "PulseTrainData")
-    # Get a list of all CSV files in the current directory
-    csv_files = glob.glob(os.path.join(current_directory, "*.csv"))
-    
-    counter = 1
-    # Loop through each CSV file
-    for file_path in csv_files:
-        # Open the file
-        with open(file_path, "r") as file:
-            # Read all lines in the file
-            lines = file.readlines()
-            # Skip the first 4 lines
-            lines = lines[4:]
-            
-        # Create a new file path for the new file
-        new_file_path = os.path.join(os.getcwd(), f"new_file_{counter}.csv")
-        # Open the new file and write the lines to it
-        with open(new_file_path, 'w') as new_file:
-            new_file.writelines(lines)
-        # Increment the counter
-        counter += 1
-        
+def process_csv_files(input_directory="PulseTrainData"):
     # Get the current directory
     current_directory = os.getcwd()
-    # Get a list of all CSV files in the current directory
-    csv_files = glob.glob(os.path.join(current_directory, "*.csv"))
+    # Join the current directory with the specified subdirectory
+    input_path = os.path.join(current_directory, input_directory)
+    # Get a list of all CSV files in the specified subdirectory
+    csv_files = glob.glob(os.path.join(input_path, "*.csv"))
 
-    # Read the CSV file, assuming it has no header
-    data = pd.read_csv('new_file_10.csv', header=None)  # replace with your CSV file name
+    # Dictionary to store processed DataFrames
+    processed_data_frames = {}
+    
+    # Iterate through each CSV file
+    for counter, file_path in enumerate(csv_files, start=1):
+        # Process the CSV file and store the DataFrame in the dictionary
+        processed_data_frames[f'data_frame_{counter}'] = process_csv_to_dataframe(file_path)
 
-    # Get the unique values in the 5th column
-    unique_values = data[4].unique()  # Indexing is 0-based, so the 5th column is at index 4
+    # Return the dictionary of processed DataFrames
+    return processed_data_frames
 
-    # Convert the array to a list
-    unique_values = list(unique_values)
-    # Define the bad number
-    bad_number = 1
-    # If the bad number is in the list, remove it
-    if bad_number in unique_values:
-        unique_values.remove(bad_number)
+def process_csv_to_dataframe(input_file):
+    # Read the CSV file into a DataFrame, skipping the first 4 rows and with no header
+    df = pd.read_csv(input_file, skiprows=4, header=None)
+    return df
 
-    # Print the list of unique values
-    print(unique_values)
-        
-    # Read the CSV file
-    df = pd.read_csv('new_file_10.csv')  # Replace with your CSV file path
+def main():
+    # Process CSV files and obtain a dictionary of DataFrames
+    processed_data_frames = process_csv_files()
 
-    # Filter rows and write to new CSV files
-    for number in unique_values:
-        # Get all rows where the 5th column equals the current number
-        filtered_df = df[df.iloc[:, 4] == number]  # Assuming the fifth column is at index 4
-        # Write these rows to a new CSV file
-        filtered_df.to_csv(f'filtered_for_{number}.csv', index=False)
+    # read data frame
+    target_data_frame_key = 'data_frame_10' # replace with data_frame_n
+    
+    # Check if the target DataFrame key exists in the processed dictionary
+    if target_data_frame_key in processed_data_frames:
+        # Retrieve the target DataFrame
+        target_df = processed_data_frames[target_data_frame_key]
+
+        # Set the option to display all rows
+        pd.set_option('display.max_rows', None) # remove this line if need only summary of rows
+
+        # Get unique values from the 5th column, excluding the value 1
+        unique_values = target_df[4].unique()
+        unique_values = [value for value in unique_values if value != 1]
+
+        # Print the unique values
+        print("Unique Values:", unique_values)
+
+        # Filter and print the DataFrame for each unique value in the 5th column
+        for number in unique_values:
+            filtered_df = target_df[target_df.iloc[:, 4] == number]
+            print(f"Filtered data for {number}:\n", filtered_df)
+
+if __name__ == "__main__":
+    # Execute the main function when the script is run directly
+    main()
