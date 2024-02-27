@@ -1,6 +1,10 @@
 import os
 import glob
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.preprocessing import StandardScaler
 
 def process_csv_files(input_directory="PulseTrainData"):
     # Get the current directory
@@ -26,6 +30,15 @@ def process_csv_to_dataframe(input_file):
     df = pd.read_csv(input_file, skiprows=4, header=None)
     return df
 
+def train_random_forest_model(X_train, y_train):
+    # Initialize Random Forest classifier
+    clf = RandomForestClassifier(n_estimators=100, random_state=42)
+
+    # Train the model
+    clf.fit(X_train, y_train)
+
+    return clf
+
 def main():
     # Process CSV files and obtain a dictionary of DataFrames
     processed_data_frames = process_csv_files()
@@ -38,20 +51,27 @@ def main():
         # Retrieve the target DataFrame
         target_df = processed_data_frames[target_data_frame_key]
 
-        # Set the option to display all rows
-        pd.set_option('display.max_rows', None) # remove this line if need only summary of rows
+        # Example feature engineering (needs to be adjusted based on our data)
+        # Here we're just using mean and standard deviation as features
+        X = target_df.drop([4], axis=1)  # Assuming column 4 is the target
+        y = target_df[4]  # Target column
 
-        # Get unique values from the 5th column, excluding the value 1
-        unique_values = target_df[4].unique()
-        unique_values = [value for value in unique_values if value != 1]
+        # Scale the data
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
 
-        # Print the unique values
-        print("Unique Values:", unique_values)
+        # Split data
+        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-        # Filter and print the DataFrame for each unique value in the 5th column
-        for number in unique_values:
-            filtered_df = target_df[target_df.iloc[:, 4] == number]
-            print(f"Filtered data for {number}:\n", filtered_df)
+        # Train the Random Forest model
+        model = train_random_forest_model(X_train, y_train)
+
+        # Make predictions
+        predictions = model.predict(X_test)
+
+        # Evaluate the model
+        print("Accuracy:", accuracy_score(y_test, predictions))
+        print(classification_report(y_test, predictions))
 
 if __name__ == "__main__":
     # Execute the main function when the script is run directly
