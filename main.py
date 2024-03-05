@@ -7,6 +7,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv2D, Flatten, MaxPooling2D, Dropout
 from tensorflow.keras.utils import to_categorical
 
+# Function to process CSV files and return a dictionary of DataFrames
 def process_csv_files(input_directory="PulseTrainData"):
     # Get the current directory
     current_directory = os.getcwd()
@@ -84,10 +85,15 @@ def create_cnn_model(input_shape, num_classes):
     return model
 
 def main():
-    # Process CSV files and obtain a dictionary of DataFrames
+    """
+    This calls the process_csv_files function to load CSV files from the PulseTrainData directory and preprocess them into a dictionary of DataFrames (processed_data_frames).
+    """
     processed_data_frames = process_csv_files()
 
-    # read data frame
+    """
+    Here, a specific DataFrame (target_df) is selected from the processed_data_frames dictionary using a key (e.g., 'data_frame_10'). 
+    This DataFrame contains the data of interest (Angles) for the current operation.
+    """
     target_data_frame_key = 'data_frame_10' # replace with data_frame_n
     
     # Check if the target DataFrame key exists in the processed dictionary
@@ -111,13 +117,25 @@ def main():
             print(f"Filtered data for {number}:\n", filtered_df)
 
     # Preprocess the DataFrame
+    """
+    The selected DataFrame is  passed to the preprocess_data function, 
+    which filters and reshapes the data, preparing it for the CNN.
+    """
     preprocessed_data = preprocess_data(target_df)
+    """
+    This line converts the angle values in the fifth column (Angle) of target_df into categorical labels, 
+    suitable for classification.
+    """
     categorical_labels = convert_to_categorical(target_df)
 
     # Convert input data to float32
     preprocessed_data = preprocessed_data.astype(np.float32)
 
     # Split the data into train and test sets
+    """
+    The preprocessed data and labels are split into training and test sets using the train_test_split function below, 
+    with 20% of the data reserved for testing.
+    """
     X_train, X_test, y_train, y_test = train_test_split(preprocessed_data, categorical_labels, test_size=0.2, random_state=42)
 
     # Define input shape based on the preprocessed data shape
@@ -127,17 +145,35 @@ def main():
     num_classes = y_train.shape[1]
 
     # Create the CNN model
+    """
+    The CNN model is created using the create_cnn_model function, 
+    with input_shape derived from the shape of the training data (X_train.shape[1:]) 
+    and num_classes from the shape of the training labels (y_train.shape[1]).
+    """
     model = create_cnn_model(input_shape, num_classes)
 
     # Train the CNN model
+    """
+    This line trains the model on the training set (X_train, y_train) in batches of 64 samples for a total of 10 epochs. 
+    During training, 10% of the training data is used as a validation set to monitor the model's performance on hidden data layer.
+    """
     model.fit(X_train, y_train, batch_size=64, epochs=10, validation_split=0.1)
 
     # Evaluate the CNN model
+    """
+    After the training, the model's performance is evaluated on the test set (X_test, y_test), 
+    providing a loss value (score[0]) and accuracy (score[1]).
+    """
     score = model.evaluate(X_test, y_test, verbose=0)
     print('Test loss:', score[0])
     print('Test accuracy:', score[1])
 
     # Use the model to make predictions
+    """
+    The trained model makes predictions on the test set, 
+    which can be used to analyze the model's classification performance on hidden data layer.
+    This one is not yet implemented -- not sure why, need troubleshooting.
+    """
     predictions = model.predict(X_test)
 
 if __name__ == "__main__":
