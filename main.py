@@ -1,60 +1,55 @@
-import os
-import glob
 import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+import torch
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
 
-if __name__ == "__main__":
-    
-    # Get the current directory and append the "PulseTrainData" subdirectory
-    current_directory = os.path.join(os.getcwd(), "PulseTrainData")
-    # Get a list of all CSV files in the current directory
-    csv_files = glob.glob(os.path.join(current_directory, "*.csv"))
-    
-    counter = 1
-    # Loop through each CSV file
-    for file_path in csv_files:
-        # Open the file
-        with open(file_path, "r") as file:
-            # Read all lines in the file
-            lines = file.readlines()
-            # Skip the first 4 lines
-            lines = lines[4:]
-            
-        # Create a new file path for the new file
-        new_file_path = os.path.join(os.getcwd(), f"new_file_{counter}.csv")
-        # Open the new file and write the lines to it
-        with open(new_file_path, 'w') as new_file:
-            new_file.writelines(lines)
-        # Increment the counter
-        counter += 1
-        
-    # Get the current directory
-    current_directory = os.getcwd()
-    # Get a list of all CSV files in the current directory
-    csv_files = glob.glob(os.path.join(current_directory, "*.csv"))
+# Load the datasets
+known_data = pd.read_csv("Stagger.csv")
+unknown_data = pd.read_csv("unknown_cycler.csv")
 
-    # Read the CSV file, assuming it has no header
-    data = pd.read_csv('new_file_10.csv', header=None)  # replace with your CSV file name
+# Aggregate the data from each CSV into a single feature vector
+# For example, using mean and standard deviation
+known_features = known_data.describe().iloc[1:3, :].values.flatten()  # Mean and std
+unknown_features = unknown_data.describe().iloc[1:3, :].values.flatten()  # Mean and std
 
-    # Get the unique values in the 5th column
-    unique_values = data[4].unique()  # Indexing is 0-based, so the 5th column is at index 4
+# Combine and scale the features
+X = np.array([known_features, unknown_features])
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-    # Convert the array to a list
-    unique_values = list(unique_values)
-    # Define the bad number
-    bad_number = 1
-    # If the bad number is in the list, remove it
-    if bad_number in unique_values:
-        unique_values.remove(bad_number)
+# Convert to PyTorch tensors
+X_tensor = torch.tensor(X_scaled, dtype=torch.float32)
+y_tensor = torch.tensor(
+    [1, 0], dtype=torch.float32
+)  # Labels (1 for known, 0 for unknown)
 
-    # Print the list of unique values
-    print(unique_values)
-        
-    # Read the CSV file
-    df = pd.read_csv('new_file_10.csv')  # Replace with your CSV file path
+# Create PyTorch datasets and data loaders
+dataset = TensorDataset(X_tensor, y_tensor)
+loader = DataLoader(
+    dataset, batch_size=1
+)  # Batch size of 1 since we have only 2 samples
 
-    # Filter rows and write to new CSV files
-    for number in unique_values:
-        # Get all rows where the 5th column equals the current number
-        filtered_df = df[df.iloc[:, 4] == number]  # Assuming the fifth column is at index 4
-        # Write these rows to a new CSV file
-        filtered_df.to_csv(f'filtered_for_{number}.csv', index=False)
+# Neural network
+model = nn.Sequential(
+    nn.Linear(X_scaled.shape[1], 64), nn.ReLU(), nn.Linear(64, 1), nn.Sigmoid()
+)
+
+# Define loss function and optimizer
+criterion = nn.BCELoss()
+optimizer = torch.optim.Adam(model.parameters())
+
+# Train the model
+for epoch in range(100):
+    for inputs, targets in loader:
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = criterion(outputs.squeeze(1), targets)
+        loss.backward()
+        optimizer.step()
+
+# Evaluate the model (In this case, we have only 2 samples)
+with torch.no_grad():
+    predictions = model(X_tensor)
+    print("Predictions:", predictions)
