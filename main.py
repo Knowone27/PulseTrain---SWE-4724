@@ -9,40 +9,53 @@ from tensorflow.keras.utils import to_categorical
 
 # Function to process CSV files and return a dictionary of DataFrames
 def process_csv_files(input_directory="PulseTrainData"):
-    # Get the current directory
+
     current_directory = os.getcwd()
-    # Join the current directory with the specified subdirectory
+
     input_path = os.path.join(current_directory, input_directory)
-    # Get a list of all CSV files in the specified subdirectory
+
     csv_files = glob.glob(os.path.join(input_path, "*.csv"))
 
-    # Dictionary to store processed DataFrames
     processed_data_frames = {}
+
+    interleaved_counter = 1
     
     # Iterate through each CSV file
-    for counter, file_path in enumerate(csv_files, start=1):
-        # Process the CSV file and store the DataFrame in the dictionary
-        processed_data_frames[f'data_frame_{counter}'] = process_csv_to_dataframe(file_path)
+    for file_path in csv_files:
+        df = process_csv_to_dataframe(file_path)
 
-    # Return the dictionary of processed DataFrames
+        if "Interleaved" in file_path:
+            key = f'Interleaved_{interleaved_counter}'
+            interleaved_counter += 1
+        else:
+            key = f'data_frame_{interleaved_counter}'
+            interleaved_counter += 1
+            
+        processed_data_frames[key] = df
+
     return processed_data_frames
 
+#Read the CSV file into a DF and skip first 4 rows and BUFFERs
 def process_csv_to_dataframe(input_file):
-    # Read the CSV file into a DataFrame, skipping the first 4 rows and with no header
+    print(f"Processing file: {input_file}")
     df = pd.read_csv(input_file, skiprows=4, header=None)
-    return df
+
+    df_filtered = df[~df.iloc[:, 0].str.contains('BUFFER')]
+
+    return df_filtered
 
 # Preprocessing function to reshape DataFrame into a suitable shape for the CNN
 def preprocess_data(df):
-    # Filter out rows where the fifth column has a value of 1
-    df_filtered = df[df[4] != 1]
+
+    print("DataFrame before preprocessing:\n", df)
+
+    df_filtered = df[df[4] != 1.0]
     
-    num_samples = df_filtered.shape[0]  # Get the number of samples (rows) in the filtered DataFrame
-    print("Number of samples in the DataFrame after filtering:", num_samples)  # Print the number of samples
+    num_samples = df_filtered.shape[0]  
+    print("Number of samples in the DataFrame after filtering:", num_samples) 
     
-    # Define the expected size for reshaping based on the size of the filtered DataFrame
     expected_size = num_samples * 20 * 20 * 1  
-    print("Expected size after reshaping:", expected_size)  # Print the expected size
+    print("Expected size after reshaping:", expected_size)  
     
     # Resize the DataFrame to evenly divide the expected size after reshaping
     resize_factor = expected_size // df_filtered.size
@@ -51,21 +64,20 @@ def preprocess_data(df):
     # Reshape the resized DataFrame into a 20x20 grid with a single channel
     df_as_grid = resized_df.values.reshape(num_samples, 20, 20, 1)
     
-    print("Reshaped DataFrame shape:", df_as_grid.shape)  # Print the shape of the reshaped DataFrame
+    print("Reshaped DataFrame shape:", df_as_grid.shape) 
 
     return df_as_grid
 
 # Convert unique angle values to categorical labels
 def convert_to_categorical(df):
-    # Filter the DataFrame to exclude rows where the fifth column has a value of 1
+    # Filter the DataFrame to exclude rows where the Angle has a value of 1 (BUFFER had this but may not be needed now?)
     filtered_df = df[df[4] != 1]
     
-    # Convert unique angle values from the filtered DataFrame to categorical labels
-    labels = to_categorical(filtered_df[4].values)
+    labels = to_categorical(filtered_df[4].values).astype(int)
     
     return labels
 
-# CNN architecture
+# CNN
 def create_cnn_model(input_shape, num_classes):
     model = Sequential([
         Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=input_shape),
@@ -90,92 +102,59 @@ def main():
     """
     processed_data_frames = process_csv_files()
 
-    """
-    Here, a specific DataFrame (target_df) is selected from the processed_data_frames dictionary using a key (e.g., 'data_frame_10'). 
-    This DataFrame contains the data of interest (Angles) for the current operation.
-    """
-    target_data_frame_key = 'data_frame_10' # replace with data_frame_n
-    
-    # Check if the target DataFrame key exists in the processed dictionary
-    if target_data_frame_key in processed_data_frames:
-        # Retrieve the target DataFrame
-        target_df = processed_data_frames[target_data_frame_key]
+    total_test_loss = 0
+    total_test_accuracy = 0
+    num_files_processed = 0
 
-        # Set the option to display all rows
-        # pd.set_option('display.max_rows', None) # remove this line if need only summary of rows
+    # Iterate through each processed DataFrame
+    for key, df in processed_data_frames.items():
+        print({key})
+        if key.startswith("Interleaved"):
+            print(f"\nProcessing DataFrame from file: {key}")
 
-        # Get unique values from the 5th column, excluding the value 1
-        unique_values = target_df[4].unique()
-        unique_values = [value for value in unique_values if value != 1]
+            # Print all the unique values in each dataframe
+            unique_values = df[4].unique()
+            print(f"Unique Values in {key}:", unique_values)
 
-        # Print the unique values
-        print("Unique Values:", unique_values)
+            for number in unique_values:
+                filtered_df = df[df.iloc[:, 4] == number]
+                print(f"Filtered data for {number}:\n", filtered_df)
 
-        # Filter and print the DataFrame for each unique value in the 5th column
-        for number in unique_values:
-            filtered_df = target_df[target_df.iloc[:, 4] == number]
-            print(f"Filtered data for {number}:\n", filtered_df)
+            preprocessed_data = preprocess_data(df)
+            categorical_labels = convert_to_categorical(df)
+            
 
-    # Preprocess the DataFrame
-    """
-    The selected DataFrame is  passed to the preprocess_data function, 
-    which filters and reshapes the data, preparing it for the CNN.
-    """
-    preprocessed_data = preprocess_data(target_df)
-    """
-    This line converts the angle values in the fifth column (Angle) of target_df into categorical labels, 
-    suitable for classification.
-    """
-    categorical_labels = convert_to_categorical(target_df)
+            # Train and evaluate the model
+            X_train, X_test, y_train, y_test = train_test_split(preprocessed_data, categorical_labels, test_size=0.2, random_state=42)
 
-    # Convert input data to float32
-    preprocessed_data = preprocessed_data.astype(np.float32)
+            X_train = X_train.astype(np.float32)
+            y_train = y_train.astype(np.float32)
+            X_test = X_test.astype(np.float32)
+            y_test = y_test.astype(np.float32)
 
-    # Split the data into train and test sets
-    """
-    The preprocessed data and labels are split into training and test sets using the train_test_split function below, 
-    with 20% of the data reserved for testing.
-    """
-    X_train, X_test, y_train, y_test = train_test_split(preprocessed_data, categorical_labels, test_size=0.2, random_state=42)
+            input_shape = X_train.shape[1:]
+            num_classes = y_train.shape[1]
+            model = create_cnn_model(input_shape, num_classes)
+            model.fit(X_train, y_train, batch_size=64, epochs=10, validation_split=0.1)
+            score = model.evaluate(X_test, y_test, verbose=0)
+            print('Test loss:', score[0])
+            print('Test accuracy:', score[1])
 
-    # Define input shape based on the preprocessed data shape
-    input_shape = X_train.shape[1:]
 
-    # Define the number of unique classes based on the shape of the labels
-    num_classes = y_train.shape[1]
+            # Accumulate the Scores
+            total_test_loss += score[0]
+            total_test_accuracy += score[1]
+            num_files_processed += 1
 
-    # Create the CNN model
-    """
-    The CNN model is created using the create_cnn_model function, 
-    with input_shape derived from the shape of the training data (X_train.shape[1:]) 
-    and num_classes from the shape of the training labels (y_train.shape[1]).
-    """
-    model = create_cnn_model(input_shape, num_classes)
+    if num_files_processed > 0:
+        average_test_loss = total_test_loss / num_files_processed
+        average_test_accuracy = total_test_accuracy / num_files_processed
+        print("\nOverall Test Loss:", average_test_loss)
+        print("Overall Test Accuracy:", average_test_accuracy)
+    else:
+        print("No files processed.")
 
-    # Train the CNN model
-    """
-    This line trains the model on the training set (X_train, y_train) in batches of 64 samples for a total of 10 epochs. 
-    During training, 10% of the training data is used as a validation set to monitor the model's performance on hidden data layer.
-    """
-    model.fit(X_train, y_train, batch_size=64, epochs=10, validation_split=0.1)
-
-    # Evaluate the CNN model
-    """
-    After the training, the model's performance is evaluated on the test set (X_test, y_test), 
-    providing a loss value (score[0]) and accuracy (score[1]).
-    """
-    score = model.evaluate(X_test, y_test, verbose=0)
-    print('Test loss:', score[0])
-    print('Test accuracy:', score[1])
-
-    # Use the model to make predictions
-    """
-    The trained model makes predictions on the test set, 
-    which can be used to analyze the model's classification performance on hidden data layer.
-    This one is not yet implemented -- not sure why, need troubleshooting.
-    """
-    predictions = model.predict(X_test)
+    print("\nAll Processing Finished.\n")
 
 if __name__ == "__main__":
-    # Execute the main function when the script is run directly
     main()
